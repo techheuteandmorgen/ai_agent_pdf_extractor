@@ -1,0 +1,7 @@
+env/
+*.pyc
+__pycache__/
+*.log
+*.sqlite3
+output_data/
+uploaded_pdfs/
