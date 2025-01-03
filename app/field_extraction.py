@@ -4,7 +4,6 @@ import os
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-
 def extract_with_ai(raw_text):
     """Extract structured data using OpenAI API."""
     prompt_template = """

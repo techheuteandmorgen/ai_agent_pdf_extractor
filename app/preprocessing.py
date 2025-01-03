@@ -35,18 +35,10 @@ def process_pdf(pdf_path):
 
 
 def bulk_process_to_excel(input_folder, consolidated_excel_path):
-    """
-    Process all PDFs in the input folder and save all extracted structured data into an Excel file.
-    """
     try:
-        # Ensure the input folder exists
-        if not os.path.exists(input_folder):
-            raise FileNotFoundError(f"Input folder does not exist: {input_folder}")
+        all_data = []  # Reset data for every bulk process call
 
-        # Prepare to store extracted data
-        all_data = []
-
-        # Iterate over all PDF files in the folder
+        # Iterate over all PDF files in the temporary folder
         for file_name in os.listdir(input_folder):
             if file_name.endswith(".pdf"):
                 pdf_path = os.path.join(input_folder, file_name)
@@ -58,25 +50,9 @@ def bulk_process_to_excel(input_folder, consolidated_excel_path):
                     structured_data["source_file"] = file_name  # Add source file name for reference
                     all_data.append(structured_data)
 
-        # Check if any data was extracted
         if all_data:
             # Combine extracted data into a DataFrame
             df = pd.DataFrame(all_data)
-
-            # Combine day, month, and year into a single Date column
-            if "day" in df.columns and "month" in df.columns and "year" in df.columns:
-                df["Date"] = df.apply(
-                    lambda row: f"{row['day']}/{row['month']}/{row['year']}" 
-                                if row["day"] != "N/A" and row["month"] != "N/A" and row["year"] != "N/A" 
-                                else "N/A",
-                    axis=1
-                )
-                df.drop(columns=["day", "month", "year"], inplace=True)
-
-            # Create the output folder if it doesn't exist
-            output_folder = os.path.dirname(consolidated_excel_path)
-            if not os.path.exists(output_folder):
-                os.makedirs(output_folder)
 
             # Save extracted data to an Excel file
             absolute_output_path = os.path.abspath(consolidated_excel_path)

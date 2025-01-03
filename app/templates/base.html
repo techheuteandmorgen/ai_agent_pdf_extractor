@@ -1,0 +1,34 @@
+<script>
+    // Fade-out flash messages after 3 seconds
+    setTimeout(() => {
+      const flashMessages = document.querySelectorAll('.flash-message');
+      flashMessages.forEach((message) => {
+        message.style.transition = 'opacity 0.5s ease-out';
+        message.style.opacity = '0';
+        setTimeout(() => message.remove(), 500);
+      });
+    }, 3000);
+  </script>
+  
+  <style>
+    .flash-message {
+      margin: 10px 0;
+      padding: 15px;
+      border-radius: 5px;
+    }
+  
+    .flash-success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+  
+    .flash-danger {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+  
+    .flash-warning {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+  </style>

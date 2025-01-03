@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Admin Dashboard</h1>
+            <div>
+                <span>Welcome, {{ current_user.username }}!</span>
+                <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
+            </div>
+        </div>
+
+        <!-- Metrics Section -->
+        <div class="metrics">
+            <div class="card">
+                <h2>Total Premium (Today)</h2>
+                <p id="daily-premium">₹0.00</p>
+            </div>
+            <div class="card">
+                <h2>Total Commission (Today)</h2>
+                <p id="daily-commission">₹0.00</p>
+            </div>
+            <div class="card">
+                <h2>Total Premium (All Time)</h2>
+                <p id="all-time-premium">₹0.00</p>
+            </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="charts">
+            <canvas id="user-uploads-chart"></canvas>
+        </div>
+
+        <!-- Table Section -->
+        <div class="user-table">
+            <h2>User Upload Summary</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Uploads</th>
+                        <th>Total Premium (₹)</th>
+                    </tr>
+                </thead>
+                <tbody id="user-uploads-table"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
