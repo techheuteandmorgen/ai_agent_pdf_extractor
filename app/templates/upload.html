@@ -37,28 +37,103 @@
             margin-bottom: 15px;
             font-weight: bold;
         }
+        .progress {
+            height: 25px;
+        }
+        .progress-bar {
+            font-weight: bold;
+        }
+        .download-link {
+            margin-top: 20px;
+        }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
 </head>
 <body>
     <div class="container">
         <div class="card shadow">
             <div class="card-body">
                 <h2 class="text-primary">Upload Your Files</h2>
-                <div id="status-message" style="display: none; color: blue;">Uploading and processing your files... Please wait.</div>
-                <form id="upload-form" action="{{ url_for('upload') }}" method="POST" enctype="multipart/form-data" onsubmit="showLoader()">
+                <form id="upload-form" method="POST" enctype="multipart/form-data">
                     <div class="mb-3">
-                        <input type="file" name="files" multiple class="form-control" required>
+                        <input type="file" name="files" id="files" multiple class="form-control" required>
                     </div>
                     <button type="submit" class="btn btn-primary w-100">Upload and Process</button>
                 </form>
                 <a href="{{ url_for('logout') }}" class="btn btn-danger w-100 mt-3">Logout</a>
+
+                <div id="progress-container" class="mt-4" style="display: none;">
+                    <h5>Upload Progress</h5>
+                    <div class="progress mb-3">
+                        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;">0%</div>
+                    </div>
+                    <ul id="file-status-list" class="list-group text-dark"></ul>
+                </div>
+
+                <div id="download-link-container" class="download-link" style="display: none;">
+                    <a id="download-link" class="btn btn-success" href="#" target="_blank">Download Processed File</a>
+                </div>
             </div>
         </div>
     </div>
+
     <script>
-        function showLoader() {
-            document.getElementById('status-message').style.display = 'block';
-        }
+        const socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        document.getElementById('upload-form').onsubmit = function (e) {
+            e.preventDefault();
+            const files = document.getElementById('files').files;
+            if (files.length === 0) {
+                alert("No files selected!");
+                return;
+            }
+
+            // Show the progress container
+            document.getElementById('progress-container').style.display = 'block';
+
+            const formData = new FormData();
+            for (let file of files) {
+                formData.append("files", file);
+            }
+
+            fetch("/upload", {
+                method: "POST",
+                body: formData,
+            }).then(response => {
+                if (response.ok) {
+                    console.log("Upload initiated...");
+                } else {
+                    alert("File upload failed. Please try again.");
+                }
+            }).catch(err => console.error("Error during file upload:", err));
+
+            // Listen for progress updates
+            socket.on("upload_status", (data) => {
+                const progressBar = document.getElementById('progress-bar');
+                const fileStatusList = document.getElementById('file-status-list');
+
+                // Update file status
+                const listItem = document.createElement("li");
+                listItem.classList.add("list-group-item");
+                listItem.innerText = `${data.file_name}: ${data.status}`;
+                fileStatusList.appendChild(listItem);
+
+                // Update progress bar
+                if (data.total_files && data.processed_files) {
+                    const progress = Math.round((data.processed_files / data.total_files) * 100);
+                    progressBar.style.width = `${progress}%`;
+                    progressBar.innerText = `${progress}%`;
+                }
+
+                // Show download link when processing is complete
+                if (data.link) {
+                    const downloadLinkContainer = document.getElementById("download-link-container");
+                    const downloadLink = document.getElementById("download-link");
+                    downloadLink.href = data.link;
+                    downloadLinkContainer.style.display = "block";
+                }
+            });
+        };
     </script>
 </body>
 </html>
