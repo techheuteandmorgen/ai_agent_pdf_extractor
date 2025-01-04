@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: 'Poppins', sans-serif;
@@ -105,6 +106,16 @@
         table tbody tr:nth-child(even) {
             background: #f9f9f9;
         }
+        .charts-container {
+            margin-top: 40px;
+        }
+        .chart-box {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 40px;
+        }
     </style>
 </head>
 <body>
@@ -120,15 +131,15 @@
         <div class="stats-container">
             <div class="stats-box">
                 <h3>Total Premium (Today)</h3>
-                <p>₹{{ total_premium_today }}</p>
+                <p id="daily-premium">₹0</p>
             </div>
             <div class="stats-box">
                 <h3>Total Commission (Today)</h3>
-                <p>₹{{ total_commission_today }}</p>
+                <p id="daily-commission">₹0</p>
             </div>
             <div class="stats-box">
                 <h3>Total Premium (All Time)</h3>
-                <p>₹{{ total_premium_all_time }}</p>
+                <p id="all-time-premium">₹0</p>
             </div>
         </div>
         <div class="table-container">
@@ -139,19 +150,20 @@
                         <th>User</th>
                         <th>Uploads</th>
                         <th>Total Premium (₹)</th>
+                        <th>Commission (₹)</th>
+                        <th>Net Premium (₹)</th>
                     </tr>
                 </thead>
-                <tbody>
-                    {% for summary in user_summary %}
-                        <tr>
-                            <td>{{ summary.username }}</td>
-                            <td>{{ summary.uploads }}</td>
-                            <td>₹{{ summary.total_premium }}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
+                <tbody id="user-uploads-table"></tbody>
             </table>
         </div>
+        <div class="charts-container">
+            <div class="chart-box">
+                <h3>User Uploads Chart</h3>
+                <canvas id="user-uploads-chart"></canvas>
+            </div>
+        </div>
     </div>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
 </html>
