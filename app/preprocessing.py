@@ -1,7 +1,8 @@
 import os
 import pdfplumber
 import pandas as pd
-from .field_extraction import extract_with_ai
+from .field_extraction import extract_with_ai, map_field_variations
+from .utils import clean_numeric_field
 
 
 def extract_text_with_pdfplumber(pdf_path):
@@ -15,51 +16,51 @@ def extract_text_with_pdfplumber(pdf_path):
         return ""
 
 
-def calculate_commission_and_net(data, commission_rate=0.4):
-    """Calculate commission and net premium."""
-    try:
-        total_premium = float(data.get("TOTAL_PREMIUM", 0) or 0)
-        commission = total_premium * commission_rate
-        net_premium = total_premium - commission
+def calculate_od_premium(data):
+    """Calculate OD Premium as the sum of A and C sections."""
+    od_a = clean_numeric_field(data.get("Total Own Damage Premium (A)", 0))
+    od_c = clean_numeric_field(data.get("Total Add-On Premium (C)", 0))
+    return od_a + od_c
 
-        # Debugging output for verification
-        print(f"DEBUG: Total Premium: {total_premium}, Commission: {commission}, Net Premium: {net_premium}")
-
-        return commission, net_premium
-    except Exception as e:
-        print(f"ERROR calculating commission and net premium: {e}")
-        return 0, 0
-
-
-def clean_numeric_field(value):
-    """Remove currency symbols, commas, and whitespace from a numeric field."""
-    try:
-        if isinstance(value, str):
-            return float(value.replace('₹', '').replace(',', '').strip())
-        return float(value)
-    except ValueError:
-        return 0.0  # Default to 0.0 if conversion fails
 
 def process_pdf(pdf_path, user_id=None):
     """Process a PDF and extract structured data."""
     try:
-        # Extract text from PDF
+        # Extract raw text from the PDF
         raw_text = extract_text_with_pdfplumber(pdf_path)
         print(f"Debug: Extracted raw text from {pdf_path}.")
 
-        # Extract structured data using AI
+        # Use AI to extract structured data
         structured_data = extract_with_ai(raw_text)
         print(f"Debug: Extracted structured data from {pdf_path}:\n{structured_data}")
 
-        # Sanitize numeric fields
+        # Validate and process numeric fields
         if structured_data:
-            structured_data["TOTAL_PREMIUM"] = clean_numeric_field(structured_data.get("TOTAL_PREMIUM", 0))
-            structured_data["OD_PREMIUM"] = clean_numeric_field(structured_data.get("OD_PREMIUM", 0))
-            structured_data["TP_ONLY_PREMIUM"] = clean_numeric_field(structured_data.get("TP_ONLY_PREMIUM", 0))
-            structured_data["NET_PREMIUM"] = clean_numeric_field(structured_data.get("NET_PREMIUM", 0))
-            structured_data["IDV_SUM_INSURED"] = clean_numeric_field(structured_data.get("IDV_SUM_INSURED", 0))
+            # Extract raw premiums
+            od_a = clean_numeric_field(structured_data.get("Total Own Damage Premium (A)", 0))
+            od_c = clean_numeric_field(structured_data.get("Total Add-On Premium (C)", 0))
+            tp_b = clean_numeric_field(structured_data.get("Total Liability Premium (B)", 0))
+            net_premium = clean_numeric_field(structured_data.get("Net Premium (A+B+C)", 0))
+            total_premium = clean_numeric_field(structured_data.get("TOTAL_PREMIUM", 0))
+
+            # Calculate OD Premium as A + C
+            structured_data["OD_PREMIUM"] = od_a + od_c
+
+            # TP Premium is directly extracted from B
+            structured_data["TP_ONLY_PREMIUM"] = tp_b
+
+            # Validate Net Premium (A+B+C)
+            structured_data["NET_PREMIUM"] = net_premium
+
+            # Total Premium validation
+            calculated_total = structured_data["OD_PREMIUM"] + structured_data["TP_ONLY_PREMIUM"]
+            if abs(calculated_total - total_premium) > 1e-2:
+                print(f"Warning: Total Premium mismatch! Calculated: {calculated_total}, Extracted: {total_premium}")
+
+            structured_data["TOTAL_PREMIUM"] = total_premium
 
         return structured_data
+
     except Exception as e:
         print(f"Error processing {pdf_path}: {e}")
         return None
@@ -70,6 +71,23 @@ def save_data_to_excel(data, output_path):
     try:
         # Convert data to a DataFrame
         df = pd.DataFrame(data)
+
+        # Remove unwanted columns and intermediate fields
+        df.drop(columns=["COMMISSION", "CHEQUE_NUMBER", "BANK_NAME", "Total Own Damage Premium (A)", "Total Add-On Premium (C)"], inplace=True, errors="ignore")
+
+        # Desired column order
+        desired_order = [
+            "S_No", "YEAR", "MONTH", "DATE", "INSURANCE_COMPANY_NAME", "Broker_Name", "IMD_CODE",
+            "LOB", "PACKAGE_LIABILITY", "FUEL_TYPE", "REN_ROLL_NEW_USED", "CUSTOMER_NAME", "MOB_NO",
+            "LOCATION", "REG_NUMBER", "VEHICLE_MAKE", "VEHICLE_MODEL", "CC_GVW", "BIKE_SCOOTER",
+            "YEAR_OF_MANUFACTURE", "ENGINE_NUMBER", "CHASIS_NUMBER", "POLICY_NO", "IDV_SUM_INSURED",
+            "NCB", "RISK_START_DATE", "OD_EXPIRE_DATE", "RENEWAL_DATE",
+            "OD_PREMIUM", "TP_ONLY_PREMIUM", "NET_PREMIUM", "TOTAL_PREMIUM",
+            "POLICY_ISSUE_DAY", "source_file"
+        ]
+
+        # Reorder columns
+        df = df.reindex(columns=desired_order, fill_value="N/A")
 
         # Append data if the file already exists
         if os.path.exists(output_path):
@@ -94,8 +112,7 @@ def bulk_process_to_excel(input_folder, consolidated_excel_path, user_id):
             "LOCATION", "REG_NUMBER", "VEHICLE_MAKE", "VEHICLE_MODEL", "CC_GVW", "BIKE_SCOOTER",
             "YEAR_OF_MANUFACTURE", "ENGINE_NUMBER", "CHASIS_NUMBER", "POLICY_NO", "IDV_SUM_INSURED",
             "NCB", "RISK_START_DATE", "OD_EXPIRE_DATE", "RENEWAL_DATE", "OD_PREMIUM", "TP_ONLY_PREMIUM",
-            "NET_PREMIUM", "TOTAL_PREMIUM", "COMMISSION", "CHEQUE_NUMBER", "BANK_NAME", "POLICY_ISSUE_DAY",
-            "source_file"
+            "NET_PREMIUM", "TOTAL_PREMIUM", "source_file"
         ]
 
         all_data = []
@@ -110,11 +127,6 @@ def bulk_process_to_excel(input_folder, consolidated_excel_path, user_id):
                 if structured_data:
                     structured_data["S_No"] = idx
                     structured_data["source_file"] = file_name
-
-                    # Calculate commission and net premium
-                    commission, net_premium = calculate_commission_and_net(structured_data)
-                    structured_data["COMMISSION"] = commission
-                    structured_data["NET_PREMIUM"] = net_premium
 
                     all_data.append(structured_data)
 

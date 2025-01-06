@@ -5,3 +5,4 @@ __pycache__/
 *.sqlite3
 output_data/
 uploaded_pdfs/
+.vercel
