@@ -16,11 +16,81 @@ def extract_text_with_pdfplumber(pdf_path):
         return ""
 
 
-def calculate_od_premium(data):
-    """Calculate OD Premium as the sum of A and C sections."""
-    od_a = clean_numeric_field(data.get("Total Own Damage Premium (A)", 0))
-    od_c = clean_numeric_field(data.get("Total Add-On Premium (C)", 0))
-    return od_a + od_c
+def validate_and_calculate_premiums(data):
+    """
+    Validate and calculate premiums:
+    - OD_PREMIUM is the sum of `Total Own Damage Premium (A)` and `Total Add-On Premium (C)`.
+    - Validate NET_PREMIUM matches the sum of OD and TP premiums.
+    - Validate TOTAL_PREMIUM matches the calculated total.
+    """
+    try:
+        # Extract raw premiums
+        od_a = clean_numeric_field(data.get("OD_PREMIUM_A", 0))
+        od_c = clean_numeric_field(data.get("OD_PREMIUM_C", 0))
+        tp_b = clean_numeric_field(data.get("TP_ONLY_PREMIUM", 0))
+        net_premium = clean_numeric_field(data.get("NET_PREMIUM", 0))
+        total_premium = clean_numeric_field(data.get("TOTAL_PREMIUM", 0))
+
+        # Calculate OD Premium as A + C
+        data["OD_PREMIUM"] = od_a + od_c
+
+        # TP Premium is directly extracted from B
+        data["TP_ONLY_PREMIUM"] = tp_b
+
+        # Validate or calculate Net Premium
+        calculated_net = data["OD_PREMIUM"] + data["TP_ONLY_PREMIUM"]
+        if abs(calculated_net - net_premium) > 1e-2:
+            data["NET_PREMIUM"] = calculated_net  # Correct Net Premium
+
+        # Validate or calculate Total Premium
+        calculated_total = data["NET_PREMIUM"]  # In most cases, Total == Net
+        if abs(calculated_total - total_premium) > 1e-2:
+            data["TOTAL_PREMIUM"] = calculated_total  # Correct Total Premium
+
+    except Exception as e:
+        print(f"Error validating and calculating premiums: {e}")
+
+    return data
+
+
+def validate_and_standardize_dates(data):
+    """
+    Validate and standardize dates:
+    - Ensure `RENEWAL_DATE` equals `OD_EXPIRE_DATE`.
+    - Ensure `START_DATE` matches `RISK_START_DATE`.
+    """
+    try:
+        # Standardize RENEWAL_DATE to match OD_EXPIRE_DATE
+        data["RENEWAL_DATE"] = data.get("OD_EXPIRE_DATE", "N/A")
+
+        # Standardize START_DATE to match RISK_START_DATE
+        data["START_DATE"] = data.get("RISK_START_DATE", "N/A")
+
+    except Exception as e:
+        print(f"Error validating dates: {e}")
+
+    return data
+
+
+def standardize_vehicle_registration(data):
+    """
+    Standardize `REN_ROLL_NEW_USED` based on the registration type.
+    """
+    try:
+        value = data.get("REN_ROLL_NEW_USED", "").strip().lower()
+
+        # Simplify the value based on logical mapping
+        if "new" in value:
+            data["REN_ROLL_NEW_USED"] = "New"
+        elif "old" in value or "used" in value:
+            data["REN_ROLL_NEW_USED"] = "Old"
+        else:
+            data["REN_ROLL_NEW_USED"] = "Unknown"
+
+    except Exception as e:
+        print(f"Error standardizing vehicle registration: {e}")
+
+    return data
 
 
 def process_pdf(pdf_path, user_id=None):
@@ -36,28 +106,17 @@ def process_pdf(pdf_path, user_id=None):
 
         # Validate and process numeric fields
         if structured_data:
-            # Extract raw premiums
-            od_a = clean_numeric_field(structured_data.get("Total Own Damage Premium (A)", 0))
-            od_c = clean_numeric_field(structured_data.get("Total Add-On Premium (C)", 0))
-            tp_b = clean_numeric_field(structured_data.get("Total Liability Premium (B)", 0))
-            net_premium = clean_numeric_field(structured_data.get("Net Premium (A+B+C)", 0))
-            total_premium = clean_numeric_field(structured_data.get("TOTAL_PREMIUM", 0))
+            # Map and clean data
+            structured_data = map_field_variations(structured_data)
 
-            # Calculate OD Premium as A + C
-            structured_data["OD_PREMIUM"] = od_a + od_c
+            # Validate and calculate premium fields
+            structured_data = validate_and_calculate_premiums(structured_data)
 
-            # TP Premium is directly extracted from B
-            structured_data["TP_ONLY_PREMIUM"] = tp_b
+            # Validate and standardize dates
+            structured_data = validate_and_standardize_dates(structured_data)
 
-            # Validate Net Premium (A+B+C)
-            structured_data["NET_PREMIUM"] = net_premium
-
-            # Total Premium validation
-            calculated_total = structured_data["OD_PREMIUM"] + structured_data["TP_ONLY_PREMIUM"]
-            if abs(calculated_total - total_premium) > 1e-2:
-                print(f"Warning: Total Premium mismatch! Calculated: {calculated_total}, Extracted: {total_premium}")
-
-            structured_data["TOTAL_PREMIUM"] = total_premium
+            # Standardize vehicle registration type
+            structured_data = standardize_vehicle_registration(structured_data)
 
         return structured_data
 
@@ -73,7 +132,7 @@ def save_data_to_excel(data, output_path):
         df = pd.DataFrame(data)
 
         # Remove unwanted columns and intermediate fields
-        df.drop(columns=["COMMISSION", "CHEQUE_NUMBER", "BANK_NAME", "Total Own Damage Premium (A)", "Total Add-On Premium (C)"], inplace=True, errors="ignore")
+        df.drop(columns=["OD_PREMIUM_A", "OD_PREMIUM_C"], inplace=True, errors="ignore")
 
         # Desired column order
         desired_order = [
@@ -106,15 +165,6 @@ def save_data_to_excel(data, output_path):
 def bulk_process_to_excel(input_folder, consolidated_excel_path, user_id):
     """Process multiple PDFs and consolidate data into an Excel file."""
     try:
-        field_order = [
-            "S_No", "YEAR", "MONTH", "DATE", "INSURANCE_COMPANY_NAME", "Broker_Name", "IMD_CODE",
-            "LOB", "PACKAGE_LIABILITY", "FUEL_TYPE", "REN_ROLL_NEW_USED", "CUSTOMER_NAME", "MOB_NO",
-            "LOCATION", "REG_NUMBER", "VEHICLE_MAKE", "VEHICLE_MODEL", "CC_GVW", "BIKE_SCOOTER",
-            "YEAR_OF_MANUFACTURE", "ENGINE_NUMBER", "CHASIS_NUMBER", "POLICY_NO", "IDV_SUM_INSURED",
-            "NCB", "RISK_START_DATE", "OD_EXPIRE_DATE", "RENEWAL_DATE", "OD_PREMIUM", "TP_ONLY_PREMIUM",
-            "NET_PREMIUM", "TOTAL_PREMIUM", "source_file"
-        ]
-
         all_data = []
 
         for idx, file_name in enumerate(os.listdir(input_folder), start=1):
