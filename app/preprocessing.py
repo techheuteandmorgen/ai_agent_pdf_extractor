@@ -19,55 +19,70 @@ def extract_text_with_pdfplumber(pdf_path):
 def validate_and_calculate_premiums(data):
     """
     Validate and calculate premiums:
-    - OD_PREMIUM is the sum of `Total Own Damage Premium (A)` and `Total Add-On Premium (C)`.
-    - Validate NET_PREMIUM matches the sum of OD and TP premiums.
-    - Validate TOTAL_PREMIUM matches the calculated total.
+    - Ensure OD_PREMIUM and TP_ONLY_PREMIUM are correctly extracted and validated.
+    - Recalculate NET_PREMIUM only if it is missing or clearly incorrect.
+    - Ensure TOTAL_PREMIUM maps to Final Premium.
     """
     try:
-        # Extract raw premiums
-        od_a = clean_numeric_field(data.get("OD_PREMIUM_A", 0))
-        od_c = clean_numeric_field(data.get("OD_PREMIUM_C", 0))
-        tp_b = clean_numeric_field(data.get("TP_ONLY_PREMIUM", 0))
+        # Extract premiums
+        od_premium = clean_numeric_field(data.get("OD_PREMIUM", 0))
+        tp_premium = clean_numeric_field(data.get("TP_ONLY_PREMIUM", 0))
         net_premium = clean_numeric_field(data.get("NET_PREMIUM", 0))
         total_premium = clean_numeric_field(data.get("TOTAL_PREMIUM", 0))
 
-        # Calculate OD Premium as A + C
-        data["OD_PREMIUM"] = od_a + od_c
+        # Recalculate NET_PREMIUM if it is missing or incorrect
+        calculated_net = od_premium + tp_premium
+        if net_premium == 0 or abs(calculated_net - net_premium) > 1e-2:
+            print(f"Warning: Recalculating NET_PREMIUM. Extracted: {net_premium}, Calculated: {calculated_net}")
+            data["NET_PREMIUM"] = calculated_net
 
-        # TP Premium is directly extracted from B
-        data["TP_ONLY_PREMIUM"] = tp_b
-
-        # Validate or calculate Net Premium
-        calculated_net = data["OD_PREMIUM"] + data["TP_ONLY_PREMIUM"]
-        if abs(calculated_net - net_premium) > 1e-2:
-            data["NET_PREMIUM"] = calculated_net  # Correct Net Premium
-
-        # Validate or calculate Total Premium
-        calculated_total = data["NET_PREMIUM"]  # In most cases, Total == Net
-        if abs(calculated_total - total_premium) > 1e-2:
-            data["TOTAL_PREMIUM"] = calculated_total  # Correct Total Premium
+        # Ensure TOTAL_PREMIUM maps correctly to Final Premium
+        if total_premium == 0 or abs(total_premium - data["NET_PREMIUM"]) > 1e-2:
+            print(f"Warning: Recalculating TOTAL_PREMIUM. Extracted: {total_premium}, Using: {data['NET_PREMIUM']}")
+            data["TOTAL_PREMIUM"] = data["NET_PREMIUM"]
 
     except Exception as e:
         print(f"Error validating and calculating premiums: {e}")
 
     return data
 
+def validate_and_calculate_package_liability(data):
+    """
+    Validate and populate the PACKAGE_LIABILITY field based on OD_PREMIUM.
+    """
+    try:
+        od_premium = clean_numeric_field(data.get("OD_PREMIUM", 0))
+
+        if od_premium == 0:
+            data["PACKAGE_LIABILITY"] = "Liability Only Policy"
+        else:
+            data["PACKAGE_LIABILITY"] = "Package Policy"
+
+    except Exception as e:
+        print(f"Error validating PACKAGE_LIABILITY: {e}")
+        data["PACKAGE_LIABILITY"] = "N/A"  # Fallback if there's an error
+
+    return data
 
 def validate_and_standardize_dates(data):
     """
-    Validate and standardize dates:
-    - Ensure `RENEWAL_DATE` equals `OD_EXPIRE_DATE`.
-    - Ensure `START_DATE` matches `RISK_START_DATE`.
+    Validate and standardize date fields:
+    - Ensure `RENEWAL_DATE` matches `OD_EXPIRE_DATE`.
+    - Extract and standardize `POLICY_ISSUE_DATE`.
     """
     try:
-        # Standardize RENEWAL_DATE to match OD_EXPIRE_DATE
+        # Match RENEWAL_DATE to OD_EXPIRE_DATE
         data["RENEWAL_DATE"] = data.get("OD_EXPIRE_DATE", "N/A")
 
-        # Standardize START_DATE to match RISK_START_DATE
-        data["START_DATE"] = data.get("RISK_START_DATE", "N/A")
+        # Standardize POLICY_ISSUE_DATE
+        issue_date_variations = ["Date of issue", "Policy Issued On", "Receipt Date"]
+        for variation in issue_date_variations:
+            if variation in data and data.get(variation):
+                data["POLICY_ISSUE_DATE"] = data.pop(variation)
+                break
 
     except Exception as e:
-        print(f"Error validating dates: {e}")
+        print(f"Error standardizing dates: {e}")
 
     return data
 
@@ -98,28 +113,23 @@ def process_pdf(pdf_path, user_id=None):
     try:
         # Extract raw text from the PDF
         raw_text = extract_text_with_pdfplumber(pdf_path)
-        print(f"Debug: Extracted raw text from {pdf_path}.")
 
-        # Use AI to extract structured data
+        # Extract structured data
         structured_data = extract_with_ai(raw_text)
-        print(f"Debug: Extracted structured data from {pdf_path}:\n{structured_data}")
 
-        # Validate and process numeric fields
-        if structured_data:
-            # Map and clean data
-            structured_data = map_field_variations(structured_data)
+        # Map field variations
+        structured_data = map_field_variations(structured_data)
 
-            # Validate and calculate premium fields
-            structured_data = validate_and_calculate_premiums(structured_data)
+        # Validate and calculate premiums
+        structured_data = validate_and_calculate_premiums(structured_data)
 
-            # Validate and standardize dates
-            structured_data = validate_and_standardize_dates(structured_data)
+        # Validate and calculate package/liability
+        structured_data = validate_and_calculate_package_liability(structured_data)
 
-            # Standardize vehicle registration type
-            structured_data = standardize_vehicle_registration(structured_data)
+        # Debugging: Print final structured data before saving
+        print(f"Final structured data for {os.path.basename(pdf_path)}:\n{structured_data}")
 
         return structured_data
-
     except Exception as e:
         print(f"Error processing {pdf_path}: {e}")
         return None
