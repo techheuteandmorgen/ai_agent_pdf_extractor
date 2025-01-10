@@ -6,7 +6,10 @@ from .utils import clean_numeric_field
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def extract_with_ai(raw_text):
-    """Extract structured data using OpenAI API."""
+    """
+    Extract structured data using OpenAI API.
+    This function uses context and variations to ensure accurate field mapping.
+    """
     prompt_template = """
     Extract the following structured data as JSON from the text:
     {{
@@ -38,27 +41,38 @@ def extract_with_ai(raw_text):
         "RISK_START_DATE": "string",
         "OD_EXPIRE_DATE": "string",
         "RENEWAL_DATE": "string",
-        "Total Own Damage Premium (A)": "string",
-        "Total Add-On Premium (C)": "string",
-        "Total Liability Premium (B)": "string",
-        "Net Premium (A+B+C)": "string",
+        "OD_PREMIUM": "string",
+        "TP_ONLY_PREMIUM": "string",
+        "NET_PREMIUM": "string",
         "TOTAL_PREMIUM": "string",
         "POLICY_ISSUE_DAY": "string"
     }}
-    For any field that is not found in the text, return "N/A". Use context to map variations in field names accurately. For example:
-    - "Agent License Code" should map to "IMD_CODE".
-    - "Total Liability Premium (B)" should map to "TP_ONLY_PREMIUM".
-    - "Net Premium (A+B+C)" should map to "NET_PREMIUM".
-    - "Total Own Damage Premium (A)" and "Total Add-On Premium (C)" should sum up to "OD_PREMIUM".
-    - Ensure that `RENEWAL_DATE` matches `OD_EXPIRE_DATE`.
-    - Ensure that `RISK_START_DATE` corresponds to `START_DATE`.
-    - Ensure that `REN_ROLL_NEW_USED` is standardized to "New" or "Old" based on the vehicle's registration status.
+    Use the following mapping rules:
+    - Variations for `OD_PREMIUM`: {od_variations}
+    - Variations for `TP_ONLY_PREMIUM`: {tp_variations}
+    - Variations for `NET_PREMIUM`: {net_variations}
+    - Variations for `TOTAL_PREMIUM`: {total_variations}
+    - Variations for `POLICY_ISSUE_DAY`: {policy_issue_variations}
+    - Ensure `OD_PREMIUM` = "Total Own Damage Premium (A)" + "Total Add-On Premium (C)".
+    - Ensure `NET_PREMIUM` = `OD_PREMIUM` + `TP_ONLY_PREMIUM`.
+    - Ensure `RENEWAL_DATE` = `OD_EXPIRE_DATE`.
+    - Map `REN_ROLL_NEW_USED` to "New" or "Old" based on context.
+    For missing fields, return "N/A".
     Here is the extracted text:
     {raw_text}
     """
     try:
-        # Prepare the prompt
-        prompt = prompt_template.format(raw_text=raw_text)
+        # Define variations for key fields
+        variations = {
+            "od_variations": "Total Own Damage Premium (A), Own Damage Premium, Damage Premium, Total OD Premium – A, Net Own Damage Premium(a), OD Total (Rounded Off)",
+            "tp_variations": "Total Liability Premium (B), Total Liability Premium, Third Party Premium, Liability Premium, Liability Premium(b), Total Premium Payable, Total Act Premium, Total Act Premium-B, TP Total (Rounded Off)",
+            "net_variations": "Net Premium (A+B+C), Net Policy Premium, Total Net Premium, Net Premium (A+B), Net Premium, Total Premium (A+B+C+A1), Total Premium(Net Premium)(A+B), Total Premium (Net Premium) (A+B), Package premium (A+B), Total Package Premium(A+B), Gross Premium",
+            "total_variations": "Policy Premium, Total Premium, Premium Amount, Total (Rounded Off), Total Policy Premium, Total, Total Amount, Final Premium, Net Payable, Final Premium",
+            "policy_issue_variations": "Date of Issue, Receipt Date, Policy Issued On"
+        }
+
+        # Format the prompt
+        prompt = prompt_template.format(raw_text=raw_text, **variations)
 
         # Call OpenAI API
         response = openai.ChatCompletion.create(
@@ -67,20 +81,14 @@ def extract_with_ai(raw_text):
             temperature=0
         )
 
-        # Extract the content from the API response
+        # Parse the response
         response_content = response["choices"][0]["message"]["content"].strip()
-
-        # Parse the JSON response
-        try:
-            data = json.loads(response_content)
-            print("Debug: Extracted structured data:", data)  # Debugging
-            return data
-        except json.JSONDecodeError as e:
-            print(f"Debug: JSON decode error: {e}")
-            return {"error": "Invalid JSON in API response", "raw_response": response_content}
+        data = json.loads(response_content)
+        print("Debug: Extracted structured data:", data)
+        return data
 
     except Exception as e:
-        print(f"Debug: Error encountered: {e}")
+        print(f"Error in extract_with_ai: {e}")
         return {"error": str(e)}
 
 
@@ -128,8 +136,8 @@ def map_field_variations(data):
         "Net Premium": "NET_PREMIUM",
         "Total Premium (A+B+C+A1)": "NET_PREMIUM",
         "Total Premium(Net Premium)(A+B)": "NET_PREMIUM",
-        "Total Premium": "NET_PREMIUM",
-        "Premium": "NET_PREMIUM",
+        "Total Premium (Net Premium) (A+B)": "NET_PREMIUM",
+        "Package premium (A+B)": "NET_PREMIUM",
         "Total Package Premium(A+B)": "NET_PREMIUM",
         "Gross Premium": "NET_PREMIUM",
 
@@ -153,60 +161,13 @@ def map_field_variations(data):
         "Broker Name": "Broker_Name",
         "Channel": "Broker_Name",
 
-        # Policy_Issue_Date Variations
+        # POLICY_ISSUE_DAY Variations
         "Date of Issue": "POLICY_ISSUE_DAY",
+        "Receipt Date": "POLICY_ISSUE_DAY",
+        "Policy Issued On": "POLICY_ISSUE_DAY",
     }
 
-    # Map known variations
     for key, new_key in field_mapping.items():
         if key in data:
             data[new_key] = data.pop(key)
-
     return data
-
-
-def preprocess_extracted_data(raw_data):
-    """
-    Preprocess the raw extracted data to handle calculated fields
-    like OD_PREMIUM, TP_ONLY_PREMIUM, and NET_PREMIUM.
-    """
-    try:
-        # Map field variations
-        raw_data = map_field_variations(raw_data)
-
-        # Handle OD Premium (sum of A and C)
-        od_a = clean_numeric_field(raw_data.get("OD_PREMIUM_A", 0))
-        od_c = clean_numeric_field(raw_data.get("OD_PREMIUM_C", 0))
-        raw_data["OD_PREMIUM"] = od_a + od_c
-
-        # Ensure TP Premium is numeric
-        tp_premium = clean_numeric_field(raw_data.get("TP_ONLY_PREMIUM", 0))
-
-        # Recalculate Net Premium if missing or zero
-        net_premium = clean_numeric_field(raw_data.get("NET_PREMIUM", 0))
-        if net_premium == 0:  # Recalculate only if zero
-            net_premium = raw_data["OD_PREMIUM"] + tp_premium
-        raw_data["NET_PREMIUM"] = net_premium
-
-        # Ensure Total Premium is numeric
-        raw_data["TOTAL_PREMIUM"] = clean_numeric_field(raw_data.get("TOTAL_PREMIUM", 0))
-
-        # Ensure RENEWAL_DATE matches OD_EXPIRE_DATE
-        raw_data["RENEWAL_DATE"] = raw_data.get("OD_EXPIRE_DATE", "N/A")
-
-        # Ensure RISK_START_DATE is standardized
-        raw_data["RISK_START_DATE"] = raw_data.get("START_DATE", raw_data.get("RISK_START_DATE", "N/A"))
-
-        # Standardize REN_ROLL_NEW_USED to "New" or "Old"
-        reg_type = raw_data.get("REN_ROLL_NEW_USED", "").strip().lower()
-        if "new" in reg_type:
-            raw_data["REN_ROLL_NEW_USED"] = "New"
-        elif "old" in reg_type or "used" in reg_type:
-            raw_data["REN_ROLL_NEW_USED"] = "Old"
-        else:
-            raw_data["REN_ROLL_NEW_USED"] = "Unknown"
-
-        return raw_data
-    except Exception as e:
-        print(f"Error preprocessing data: {e}")
-        return raw_data
