@@ -88,7 +88,6 @@
                 return;
             }
 
-            // Show the progress container
             document.getElementById('progress-container').style.display = 'block';
 
             const formData = new FormData();
@@ -107,25 +106,21 @@
                 }
             }).catch(err => console.error("Error during file upload:", err));
 
-            // Listen for progress updates
             socket.on("upload_status", (data) => {
                 const progressBar = document.getElementById('progress-bar');
                 const fileStatusList = document.getElementById('file-status-list');
 
-                // Update file status
                 const listItem = document.createElement("li");
                 listItem.classList.add("list-group-item");
                 listItem.innerText = `${data.file_name}: ${data.status}`;
                 fileStatusList.appendChild(listItem);
 
-                // Update progress bar
                 if (data.total_files && data.processed_files) {
                     const progress = Math.round((data.processed_files / data.total_files) * 100);
                     progressBar.style.width = `${progress}%`;
                     progressBar.innerText = `${progress}%`;
                 }
 
-                // Show download link when processing is complete
                 if (data.link) {
                     const downloadLinkContainer = document.getElementById("download-link-container");
                     const downloadLink = document.getElementById("download-link");

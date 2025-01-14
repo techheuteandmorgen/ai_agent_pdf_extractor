@@ -40,6 +40,7 @@
             background-color: #ffe4e4;
             color: #d9534f;
             text-align: left;
+            font-size: 14px;
         }
         .container .alert p {
             margin: 0;
@@ -82,6 +83,15 @@
             font-size: 14px;
             color: #666;
         }
+        .container p a {
+            color: #0d6efd;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+        .container p a:hover {
+            color: #0256c7;
+        }
         @media screen and (max-width: 480px) {
             .container {
                 padding: 30px 20px;
@@ -108,6 +118,7 @@
             <button type="submit">Login</button>
         </form>
         <p>Secure Today and Tomorrow</p>
+        <p><a href="{{ url_for('register') }}">Don't have an account? Register here.</a></p>
     </div>
 </body>
 </html>

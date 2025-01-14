@@ -1,20 +1,60 @@
 document.addEventListener('DOMContentLoaded', function () {
     // Fetch and update dashboard metrics
     fetch('/api/dashboard_data')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch dashboard data');
+            }
+            return response.json();
+        })
         .then(data => {
-            document.getElementById('daily-premium').textContent = `₹${data.daily_premium || 0}`;
-            document.getElementById('daily-commission').textContent = `₹${data.daily_commission || 0}`;
-            document.getElementById('all-time-premium').textContent = `₹${data.total_premium || 0}`;
+            const dailyPremiumElem = document.getElementById('daily-premium');
+            const dailyCommissionElem = document.getElementById('daily-commission');
+            const allTimePremiumElem = document.getElementById('all-time-premium');
+
+            if (dailyPremiumElem) {
+                dailyPremiumElem.textContent = `₹${data.daily_premium || 0}`;
+            } else {
+                console.error('Element with ID "daily-premium" not found.');
+            }
+
+            if (dailyCommissionElem) {
+                dailyCommissionElem.textContent = `₹${data.daily_commission || 0}`;
+            } else {
+                console.error('Element with ID "daily-commission" not found.');
+            }
+
+            if (allTimePremiumElem) {
+                allTimePremiumElem.textContent = `₹${data.total_premium_all_time || 0}`;
+            } else {
+                console.error('Element with ID "all-time-premium" not found.');
+            }
         })
         .catch(error => console.error('Error fetching dashboard data:', error));
 
     // Fetch and display user upload summary and chart
     fetch('/api/user_uploads')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch user uploads');
+            }
+            return response.json();
+        })
         .then(data => {
             const tableBody = document.getElementById('user-uploads-table');
-            const ctx = document.getElementById('user-uploads-chart').getContext('2d');
+            const chartCanvas = document.getElementById('user-uploads-chart');
+
+            if (!tableBody) {
+                console.error('Element with ID "user-uploads-table" not found.');
+                return;
+            }
+
+            if (!chartCanvas) {
+                console.error('Element with ID "user-uploads-chart" not found.');
+                return;
+            }
+
+            const ctx = chartCanvas.getContext('2d');
 
             // Clear and populate table
             tableBody.innerHTML = '';
@@ -24,16 +64,16 @@ document.addEventListener('DOMContentLoaded', function () {
             data.forEach(row => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>${row.username}</td>
-                    <td>${row.uploads}</td>
+                    <td>${row.username || 'N/A'}</td>
+                    <td>${row.uploads || 0}</td>
                     <td>₹${row.total_premium || 0}</td>
                     <td>₹${row.commission || 0}</td>
                     <td>₹${row.net_premium || 0}</td>
                 `;
                 tableBody.appendChild(tr);
 
-                labels.push(row.username);
-                values.push(row.total_premium);
+                labels.push(row.username || 'N/A');
+                values.push(row.total_premium || 0);
             });
 
             // Generate chart
@@ -56,6 +96,11 @@ document.addEventListener('DOMContentLoaded', function () {
                             position: 'top',
                         },
                     },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
                 }
             });
         })

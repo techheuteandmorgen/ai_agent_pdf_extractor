@@ -1,7 +1,6 @@
 import openai
 import json
 import os
-from .utils import clean_numeric_field
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -45,7 +44,9 @@ def extract_with_ai(raw_text):
         "TP_ONLY_PREMIUM": "string",
         "NET_PREMIUM": "string",
         "TOTAL_PREMIUM": "string",
-        "POLICY_ISSUE_DAY": "string"
+        "POLICY_ISSUE_DAY": "string",
+        "UGST": "string",
+        "CGST": "string"
     }}
     Use the following mapping rules:
     - Variations for `OD_PREMIUM`: {od_variations}
@@ -53,6 +54,8 @@ def extract_with_ai(raw_text):
     - Variations for `NET_PREMIUM`: {net_variations}
     - Variations for `TOTAL_PREMIUM`: {total_variations}
     - Variations for `POLICY_ISSUE_DAY`: {policy_issue_variations}
+    - Variations for `UGST`: {ugst_variations}
+    - Variations for `CGST`: {cgst_variations}
     - Ensure `OD_PREMIUM` = "Total Own Damage Premium (A)" + "Total Add-On Premium (C)".
     - Ensure `NET_PREMIUM` = `OD_PREMIUM` + `TP_ONLY_PREMIUM`.
     - Ensure `RENEWAL_DATE` = `OD_EXPIRE_DATE`.
@@ -68,7 +71,9 @@ def extract_with_ai(raw_text):
             "tp_variations": "Total Liability Premium (B), Total Liability Premium, Third Party Premium, Liability Premium, Liability Premium(b), Total Premium Payable, Total Act Premium, Total Act Premium-B, TP Total (Rounded Off)",
             "net_variations": "Net Premium (A+B+C), Net Policy Premium, Total Net Premium, Net Premium (A+B), Net Premium, Total Premium (A+B+C+A1), Total Premium(Net Premium)(A+B), Total Premium (Net Premium) (A+B), Package premium (A+B), Total Package Premium(A+B), Gross Premium",
             "total_variations": "Policy Premium, Total Premium, Premium Amount, Total (Rounded Off), Total Policy Premium, Total, Total Amount, Final Premium, Net Payable, Final Premium",
-            "policy_issue_variations": "Date of Issue, Receipt Date, Policy Issued On"
+            "policy_issue_variations": "Date of Issue, Receipt Date, Policy Issued On",
+            "ugst_variations": "SGST @9 %, UGST @9 %",
+            "cgst_variations": "CGST @9 %, Central GST @9 %",
         }
 
         # Format the prompt
@@ -165,6 +170,12 @@ def map_field_variations(data):
         "Date of Issue": "POLICY_ISSUE_DAY",
         "Receipt Date": "POLICY_ISSUE_DAY",
         "Policy Issued On": "POLICY_ISSUE_DAY",
+
+        # Tax Variations
+        "SGST @9 %": "UGST",
+        "UGST @9 %": "UGST",
+        "CGST @9 %": "CGST",
+        "Central GST @9 %": "CGST",
     }
 
     for key, new_key in field_mapping.items():
