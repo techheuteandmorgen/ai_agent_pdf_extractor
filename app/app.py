@@ -16,8 +16,6 @@ from app.models import db, User, Upload
 from app.preprocessing import bulk_process_to_excel
 from app.preprocessing import process_pdf, bulk_process_to_excel, save_data_to_excel
 
-
-
 # Flask App Initialization
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
