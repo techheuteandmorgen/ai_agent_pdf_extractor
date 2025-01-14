@@ -131,30 +131,38 @@
         <div class="stats-container">
             <div class="stats-box">
                 <h3>Total Premium (Today)</h3>
-                <p id="daily-premium">₹0</p>
+                <p id="daily-premium">{{ total_premium_today }}</p>
             </div>
             <div class="stats-box">
                 <h3>Total Commission (Today)</h3>
-                <p id="daily-commission">₹0</p>
+                <p id="daily-commission">{{ total_commission_today }}</p>
             </div>
             <div class="stats-box">
                 <h3>Total Premium (All Time)</h3>
-                <p id="all-time-premium">₹0</p>
+                <p id="all-time-premium">{{ total_premium_all_time }}</p>
             </div>
         </div>
         <div class="table-container">
             <h3>User Upload Summary</h3>
-            <table>
+            <table id="user-uploads-table">
                 <thead>
                     <tr>
-                        <th>User</th>
-                        <th>Uploads</th>
+                        <th>Filename</th>
                         <th>Total Premium (₹)</th>
                         <th>Commission (₹)</th>
-                        <th>Net Premium (₹)</th>
+                        <th>Uploaded By</th>
                     </tr>
                 </thead>
-                <tbody id="user-uploads-table"></tbody>
+                <tbody>
+                    {% for upload in uploads %}
+                    <tr>
+                        <td>{{ upload.filename }}</td>
+                        <td>₹{{ upload.total_premium }}</td>
+                        <td>₹{{ upload.commission }}</td>
+                        <td>{{ upload.user.username }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
             </table>
         </div>
         <div class="charts-container">
